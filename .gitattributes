@@ -1,2 +1,2 @@
-lib/* linguist-vendored*
-.py linguist-vendored
+lib/* linguist-vendored
+*.py linguist-vendored
