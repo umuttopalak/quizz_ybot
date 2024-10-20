@@ -1,2 +1,3 @@
 lib/* linguist-vendored
-*.py linguist-vendored
+bin/* linguist-vendored
+lib64/* linguist-vendored
