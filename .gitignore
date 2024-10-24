@@ -1,5 +1,5 @@
 lib/
 bin/
-lib64/
+lib64
 share/
 pyvenv.cfg
