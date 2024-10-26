@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from typing import Final
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackContext, CallbackQueryHandler, ConversationHandler
 
 load_dotenv()
 
@@ -12,7 +12,8 @@ BOT_USERNAME: Final = '@quizz_ybot'
 
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hi!, I am your quiz making wizard, under your service!, use /help command to learn how to trigger my magic trick! ")
+    fname = update.message.from_user.first_name
+    await update.message.reply_text("Welcome, ${fname}! I am your quiz making wizard, under your service!, use /help command to learn how to trigger my magic trick! ")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("To turn your text into a quiz, please surround the question by a question mark `?` and a dot `.` , and then follow it with each answer surrounded by an exlamation mark `!` and a dot `.` , and follow it with the correct answer ID surrounded by colons `:`, then an optional explanation surrounded by double colons `::`, example: ```\n?what is the color of sky. \n!blue. \n!green. \n!red. \n:1: \n::just look at it!::```", parse_mode='MarkdownV2')
@@ -20,8 +21,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def quiz_command(update: Update, context: CallbackContext):
     await create_quiz(update.message.text, update, context)
 
+
 #responses
-    
 async def create_quiz(text: str, update: Update, context: CallbackContext):
     question_match = re.search(r"\?([^\.]+)\.", text)
     print(f'NOOOOOOOOOOO')
@@ -72,6 +73,66 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     else:
         await update.message.reply_text("Please provide a question surrounded by a question mark '?' in the beginning and a dot '.' in the end. see /help")
 
+# turn sequence of messages into a quiz
+quizzes = {}
+async def lquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    quizzes[user_id] = {"question": "", "answers": [], "correct_answer": None, "explanation": ""}
+    
+    await update.message.reply_text("Creating a new quiz! Please send the question.")
+
+async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    quiz = quizzes.get(user_id)
+
+    if quiz is None:
+        await update.message.reply_text("Please start a new quiz by sending /lquiz.")
+        return
+
+    if not quiz["question"]:
+        # First message is the question
+        quiz["question"] = update.message.text
+        await update.message.reply_text("Now send me the list of answers, one per line.")
+        if update.message.text.strip():
+            quizzes[user_id]["answers"].append(update.message.text)
+            update.message.reply_text("Send the next answer or type 'done' when finished.")
+        else:
+            update.message.reply_text("Please send a valid answer.")
+    elif quiz["correct_answer"] is None:
+        # Next message is the correct answer number
+        if update.message.text.lower() == 'done':
+            await update.message.reply_text("Please send the number of the correct answer.")
+        else:
+            try:
+                correct_answer = int(update.message.text)
+                if 1 <= correct_answer <= len(quiz["answers"]):
+                    quiz["correct_answer"] = correct_answer
+                    await update.message.reply_text("Optionally, send an explanation for the answer. Type 'done' if you don't want to add one.")
+                else:
+                    await update.message.reply_text(f"Please send a number between 1 and {len(quiz['answers'])}.")
+            except ValueError:
+                await update.message.reply_text("Please send a valid number.")
+    else:
+        # Last message is the explanation
+        if update.message.text.lower() == 'done':
+            quiz["explanation"] = ""
+            await send_quiz_poll(update, quiz)
+            del quizzes[user_id]  # Remove the quiz after sending
+        else:
+            quiz["explanation"] = update.message.text
+            await send_quiz_poll(update, quiz)
+            del quizzes[user_id]  # Remove the quiz after sending
+
+async def send_quiz_poll(update: Update, quiz):
+    await update.effective_chat.send_poll(
+        question=quiz["question"],
+        options=quiz["answers"],
+        is_anonymous=False,
+        type='quiz',
+        explanation=quiz["explanation"],
+        correct_option_id=quiz["correct_answer"] - 1
+    )
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_type: str = update.message.chat.type
 
@@ -81,7 +142,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     #else:
         #await update.message.reply_text('Command not found, try /quiz')
     else:
-        await quiz_command(update, context)
+        if '/quiz' in update.message.text:
+            await quiz_command(update, context)
+        else:
+            await lquiz_command(update, context)
 
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f'Update {update} caused error {context.error}')
@@ -95,9 +159,11 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(CommandHandler('help', help_command))
     app.add_handler(CommandHandler('quiz', quiz_command))
+    app.add_handler(CommandHandler('lquiz', lquiz_command))
 
 #MESSAGES
-    app.add_handler(MessageHandler(filters.TEXT, handle_message))
+    #app.add_handler(MessageHandler(filters.TEXT, handle_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_message))
 
 #ERRORS
     app.add_error_handler(error)
