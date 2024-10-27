@@ -75,63 +75,71 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
 
 # turn sequence of messages into a quiz
 quizzes = {}
+
 async def lquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    quizzes[user_id] = {"question": "", "answers": [], "correct_answer": None, "explanation": ""}
-    
+    quizzes[user_id] = {"stage": "question", "question": "", "answers": [], "correct_answer": None, "explanation": ""}
     await update.message.reply_text("Creating a new quiz! Please send the question.")
 
 async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     quiz = quizzes.get(user_id)
 
-    if quiz is None:
+    if not quiz:
         await update.message.reply_text("Please start a new quiz by sending /lquiz.")
         return
 
-    if not quiz["question"]:
-        # First message is the question
+    stage = quiz["stage"]
+
+    if stage == "question":
         quiz["question"] = update.message.text
-        await update.message.reply_text("Now send me the list of answers, one per line.")
-        if update.message.text.strip():
-            quizzes[user_id]["answers"].append(update.message.text)
-            update.message.reply_text("Send the next answer or type 'done' when finished.")
+        quiz["stage"] = "answers"
+        await update.message.reply_text("Now send me the list of answers, one per line. Type 'done' when you're finished.")
+
+    elif stage == "answers":
+        if update.message.text.lower() == "done":
+            if len(quiz["answers"]) < 2:
+                await update.message.reply_text("Please provide at least two answers.")
+            else:
+                quiz["stage"] = "correct_answer"
+                await update.message.reply_text("Please send the number of the correct answer.")
         else:
-            update.message.reply_text("Please send a valid answer.")
-    elif quiz["correct_answer"] is None:
-        # Next message is the correct answer number
-        if update.message.text.lower() == 'done':
-            await update.message.reply_text("Please send the number of the correct answer.")
-        else:
-            try:
-                correct_answer = int(update.message.text)
-                if 1 <= correct_answer <= len(quiz["answers"]):
-                    quiz["correct_answer"] = correct_answer
-                    await update.message.reply_text("Optionally, send an explanation for the answer. Type 'done' if you don't want to add one.")
-                else:
-                    await update.message.reply_text(f"Please send a number between 1 and {len(quiz['answers'])}.")
-            except ValueError:
-                await update.message.reply_text("Please send a valid number.")
-    else:
-        # Last message is the explanation
-        if update.message.text.lower() == 'done':
+            quiz["answers"].append(update.message.text)
+            await update.message.reply_text("Answer added! Send another answer or type 'done'.")
+
+    elif stage == "correct_answer":
+        try:
+            correct_answer = int(update.message.text)
+            if 1 <= correct_answer <= len(quiz["answers"]):
+                quiz["correct_answer"] = correct_answer
+                quiz["stage"] = "explanation"
+                await update.message.reply_text("Optionally, send an explanation for the correct answer. Type 'done' if you don't want to add one.")
+            else:
+                await update.message.reply_text(f"Please send a number between 1 and {len(quiz['answers'])}.")
+        except ValueError:
+            await update.message.reply_text("Please send a valid number.")
+
+    elif stage == "explanation":
+        if update.message.text.lower() == "done":
             quiz["explanation"] = ""
-            await send_quiz_poll(update, quiz)
-            del quizzes[user_id]  # Remove the quiz after sending
         else:
             quiz["explanation"] = update.message.text
-            await send_quiz_poll(update, quiz)
-            del quizzes[user_id]  # Remove the quiz after sending
+
+        await send_quiz_poll(update, quiz)
+        del quizzes[user_id]
 
 async def send_quiz_poll(update: Update, quiz):
-    await update.effective_chat.send_poll(
-        question=quiz["question"],
-        options=quiz["answers"],
-        is_anonymous=False,
-        type='quiz',
-        explanation=quiz["explanation"],
-        correct_option_id=quiz["correct_answer"] - 1
-    )
+    try:
+        await update.effective_chat.send_poll(
+            question=quiz["question"],
+            options=quiz["answers"],
+            is_anonymous=False,
+            type='quiz',
+            explanation=quiz["explanation"],
+            correct_option_id=quiz["correct_answer"] - 1
+        )
+    except Exception as e:
+        await update.message.reply_text(f"An error occurred while creating the quiz: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_type: str = update.message.chat.type
