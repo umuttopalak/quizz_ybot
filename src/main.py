@@ -3,23 +3,58 @@ import os
 from dotenv import load_dotenv
 from typing import Final
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackContext, CallbackQueryHandler, ConversationHandler
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+    CallbackContext,
+)
 
 load_dotenv()
 
-TOKEN:  Final = os.getenv('TOKEN')
+#Constants
+TOKEN: Final = os.getenv('TOKEN')
 BOT_USERNAME: Final = '@quizz_ybot'
+
 
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fname = update.message.from_user.first_name
-    await update.message.reply_text("Welcome, ${fname}! I am your quiz making wizard, under your service!, use /help command to learn how to trigger my magic trick! ")
+    await update.message.reply_text(
+        f"Welcome, {fname}! I am your quiz-making wizard, at your service! "
+        "Use /help to learn how to create quizzes."
+    )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("To turn your text into a quiz, please surround the question by a question mark `?` and a dot `.` , and then follow it with each answer surrounded by an exlamation mark `!` and a dot `.` , and follow it with the correct answer ID surrounded by colons `:`, then an optional explanation surrounded by double colons `::`, example: ```\n?what is the color of sky. \n!blue. \n!green. \n!red. \n:1: \n::just look at it!::```", parse_mode='MarkdownV2')
+    await update.message.reply_text(
+        "To create a quiz using text, format it as follows:\n"
+        "1\\. Surround the question with `\\?` and `\\.`\n"
+        "2\\. Add answers surrounded by `\\!` and `\\.`\n"
+        "3\\. Specify the correct answer ID surrounded by colons `:`\n"
+        "4\\. Optionally, add an explanation surrounded by double colons `::`\n"
+        "Example:\n"
+        "```\n"
+        "/quiz\n"
+        "?What is the color of the sky. \n"
+        "!Blue\\. \n"
+        "!Green\\. \n"
+        "!Red\\. \n"
+        ":1: \n"
+        "::Just look at it!::\n"
+        "```",
+        parse_mode='MarkdownV2',
+    )
 
 async def quiz_command(update: Update, context: CallbackContext):
-    await create_quiz(update.message.text, update, context)
+    #if quiz command is sent alone
+    if len(context.args) == 0:
+        await update.message.reply_text(
+            "Please send your quiz in the correct format or check /help for instructions."
+        )
+    else:
+        await create_quiz(update.message.text, update, context)
 
 
 #responses
