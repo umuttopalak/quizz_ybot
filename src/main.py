@@ -18,6 +18,14 @@ load_dotenv()
 TOKEN: Final = os.getenv('TOKEN')
 BOT_USERNAME: Final = '@quizz_ybot'
 
+#Regex Patterns
+QUESTION_PATTERN = r"\?([^\.]+)\."
+ANSWER_PATTERN = r"\!([^\.]+)\."
+CORRECT_ANSWER_PATTERN = r":(\d+):"
+EXPLANATION_PATTERN = r"::([^:]+)::"
+
+#quizzez object for lquiz command
+quizzes = {}
 
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -57,60 +65,59 @@ async def quiz_command(update: Update, context: CallbackContext):
         await create_quiz(update.message.text, update, context)
 
 
-#responses
+# Quiz Creation from Text
 async def create_quiz(text: str, update: Update, context: CallbackContext):
-    question_match = re.search(r"\?([^\.]+)\.", text)
-    print(f'NOOOOOOOOOOO')
-    if question_match:
-        question = question_match.group(1)  # Extract text between double quotes
-        answers = re.findall(r"\!([^\.]+)\.", text)  # Extract text between hashtags
-        answersList = []
-        correct_answer_id = 1  # Default value is "1" if not specified
-        explanation = ''  # Default explanation if not specified
-
-        # Check if answers are provided and there are at least 2 answers
-        if answers:
-            if len(answers) < 2:
-                await update.message.reply_text("Please provide at least two answers.")
-                return
-        else:
-            await update.message.reply_text("Please provide answers surrounded by an exlamation mark and a dot, example:`!answer.`  see /help", parse_mode='MarkdownV2')
-            return
-
-        # Pattern for identifying correct answer id and explanation
-        correct_answer_match = re.search(r':(\d+):', text)
-        if correct_answer_match:
-            correct_answer_id = int(correct_answer_match.group(1))
-            if correct_answer_id > len(answers) or correct_answer_id < 1:
-                await update.message.reply_text("The correct answer ID is out of the range of provided answers.")
-                return
-        else:
-            await update.message.reply_text("Please provide the correct answer ID surrounded by colons `:`.  see /help", parse_mode='MarkdownV2')
-
-        explanation_match = re.search(r'::([^:]+)::', text)
-        if explanation_match:
-            explanation = explanation_match.group(1)
-
-        quiz = f'Question: {question}\n'
-        for idx, ans in enumerate(answers, start=1):
-            quiz += f'{idx}) {ans}\n'
-            answersList.append(ans)
-
-        await context.bot.send_poll(
-            update.effective_chat.id,
-            question,
-            answersList,
-            is_anonymous=False,
-            type='quiz',
-            explanation=explanation,
-            correct_option_id=correct_answer_id-1
+    question_match = re.search(QUESTION_PATTERN, text)
+    if not question_match:
+        await update.message.reply_text(
+            "Your input does not include a valid question. Please surround the question with `\\?` and `\\.`. See /help for an example.",
+            parse_mode='MarkdownV2',
         )
-    else:
-        await update.message.reply_text("Please provide a question surrounded by a question mark '?' in the beginning and a dot '.' in the end. see /help")
+        return
 
-# turn sequence of messages into a quiz
-quizzes = {}
+    question = question_match.group(1).strip()
+    answers = re.findall(ANSWER_PATTERN, text)
+    if len(answers) < 2:
+        await update.message.reply_text(
+            "Please provide at least two answers, each surrounded by `\\!` and `\\.`. See /help for an example.",
+            parse_mode='MarkdownV2',
+        )
+        return
 
+    correct_answer_match = re.search(CORRECT_ANSWER_PATTERN, text)
+    if not correct_answer_match:
+        await update.message.reply_text(
+            "Please specify the correct answer ID surrounded by colons `:`. See /help for an example.",
+            parse_mode='MarkdownV2',
+        )
+        return
+
+    correct_answer_id = int(correct_answer_match.group(1))
+    if not (1 <= correct_answer_id <= len(answers)):
+        await update.message.reply_text(
+            f"The correct answer ID ({correct_answer_id}) is out of range. Please provide a number between 1 and {len(answers)}.",
+            parse_mode='MarkdownV2',
+        )
+        return
+
+    explanation_match = re.search(EXPLANATION_PATTERN, text)
+    explanation = explanation_match.group(1).strip() if explanation_match else ""
+
+    # Create and send poll
+    try:
+        await context.bot.send_poll(
+            chat_id=update.effective_chat.id,
+            question=question,
+            options=answers,
+            is_anonymous=False,
+            type="quiz",
+            correct_option_id=correct_answer_id - 1,
+            explanation=explanation,
+        )
+    except Exception as e:
+        await update.message.reply_text(f"An error occurred while creating the quiz: {e}")
+
+# Step-by-Step Quiz Creation - aka long quiz - aka sequence of messages
 async def lquiz_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     quizzes[user_id] = {"stage": "question", "question": "", "answers": [], "correct_answer": None, "explanation": ""}
@@ -127,7 +134,7 @@ async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stage = quiz["stage"]
 
     if stage == "question":
-        quiz["question"] = update.message.text
+        quiz["question"] = update.message.text.strip()
         quiz["stage"] = "answers"
         await update.message.reply_text("Now send me the list of answers, one per line. Type 'done' when you're finished.")
 
@@ -139,12 +146,12 @@ async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 quiz["stage"] = "correct_answer"
                 await update.message.reply_text("Please send the number of the correct answer.")
         else:
-            quiz["answers"].append(update.message.text)
+            quiz["answers"].append(update.message.text.strip())
             await update.message.reply_text("Answer added! Send another answer or type 'done'.")
 
     elif stage == "correct_answer":
         try:
-            correct_answer = int(update.message.text)
+            correct_answer = int(update.message.text.strip())
             if 1 <= correct_answer <= len(quiz["answers"]):
                 quiz["correct_answer"] = correct_answer
                 quiz["stage"] = "explanation"
@@ -155,11 +162,7 @@ async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Please send a valid number.")
 
     elif stage == "explanation":
-        if update.message.text.lower() == "done":
-            quiz["explanation"] = ""
-        else:
-            quiz["explanation"] = update.message.text
-
+        quiz["explanation"] = update.message.text.strip() if update.message.text.lower() != "done" else ""
         await send_quiz_poll(update, quiz)
         del quizzes[user_id]
 
@@ -176,41 +179,29 @@ async def send_quiz_poll(update: Update, quiz):
     except Exception as e:
         await update.message.reply_text(f"An error occurred while creating the quiz: {e}")
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message_type: str = update.message.chat.type
-
-    if message_type == 'group':
-        if '/quiz' in update.message.text:
-            await quiz_command(update, context)
-    #else:
-        #await update.message.reply_text('Command not found, try /quiz')
-    else:
-        if '/quiz' in update.message.text:
-            await quiz_command(update, context)
-        else:
-            await lquiz_command(update, context)
-
+# Error Handling
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print(f'Update {update} caused error {context.error}')
+    print(f"Update {update} caused error {context.error}")
+    await update.message.reply_text(
+        "An unexpected error occurred. Please try again later or contact support."
+    )
 
+# Main Application
 if __name__ == '__main__':
-    
-    print('starting......')
+    print('Starting bot...')
     app = Application.builder().token(TOKEN).build()
 
-#COMMANDS
+    # Commands
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(CommandHandler('help', help_command))
     app.add_handler(CommandHandler('quiz', quiz_command))
     app.add_handler(CommandHandler('lquiz', lquiz_command))
 
-#MESSAGES
-    #app.add_handler(MessageHandler(filters.TEXT, handle_message))
+    # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_message))
 
-#ERRORS
+    # Errors
     app.add_error_handler(error)
 
-#POLLS THE BOT
-    print('polling......')
-    app.run_polling(poll_interval = 3)
+    print('Polling...')
+    app.run_polling(poll_interval=3)
