@@ -4,6 +4,10 @@ A Telegram bot written in Python using the `python-telegram-bot` package.
 
 <a href="https://t.me/quizz_ybot" target="_blank"><img src="https://img.shields.io/badge/-@quizz__ybot-0077B5?style=for-the-badge&logo=telegram&logoColor=white&logoSize=10&color=25A4E4"/></a>
 
+**Preview:**
+
+<img src="./screenshot/image.png" height="300"/>
+
 ## Features
 
 1. **Create a Quiz from a Single Message**:
