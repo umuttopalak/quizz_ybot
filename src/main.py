@@ -136,7 +136,7 @@ async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if stage == "question":
         quiz["question"] = update.message.text.strip()
         quiz["stage"] = "answers"
-        await update.message.reply_text("Now send me the list of answers, one per line. Type 'done' when you're finished.")
+        await update.message.reply_text("Now send me the list of answers, one per message. Type 'done' when you're finished.")
 
     elif stage == "answers":
         if update.message.text.lower() == "done":
