@@ -2,6 +2,7 @@ import re
 import os
 from dotenv import load_dotenv
 from typing import Final
+from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -17,6 +18,8 @@ load_dotenv()
 #Constants
 TOKEN: Final = os.getenv('TOKEN')
 BOT_USERNAME: Final = '@quizz_ybot'
+WEBHOOK_URL: Final = os.getenv("WEBHOOK_URL")
+WEBHOOK_PATH: Final = f"/{TOKEN}"
 
 #Regex Patterns
 QUESTION_PATTERN = r"\?([^\.]+)\."
@@ -24,16 +27,20 @@ ANSWER_PATTERN = r"\!([^\.]+)\."
 CORRECT_ANSWER_PATTERN = r":(\d+):"
 EXPLANATION_PATTERN = r"::([^:]+)::"
 
-#quizzez object for lquiz command
+# Global variables
 quizzes = {}
+app = FastAPI()
+bot_app = Application.builder().token(TOKEN).build()
 
-#commands
+
+# Command Handlers
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fname = update.message.from_user.first_name
     await update.message.reply_text(
         f"Welcome, {fname}! I am your quiz-making wizard, at your service! "
         "Use /help to learn how to create quizzes."
     )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -52,8 +59,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ":1: \n"
         "::Just look at it!::\n"
         "```",
-        parse_mode='MarkdownV2',
+        parse_mode="MarkdownV2",
     )
+
 
 async def quiz_command(update: Update, context: CallbackContext):
     #if quiz command is sent alone
@@ -71,7 +79,7 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     if not question_match:
         await update.message.reply_text(
             "Your input does not include a valid question. Please surround the question with `\\?` and `\\.`. See /help for an example.",
-            parse_mode='MarkdownV2',
+            parse_mode="MarkdownV2",
         )
         return
 
@@ -80,7 +88,7 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     if len(answers) < 2:
         await update.message.reply_text(
             "Please provide at least two answers, each surrounded by `\\!` and `\\.`. See /help for an example.",
-            parse_mode='MarkdownV2',
+            parse_mode="MarkdownV2",
         )
         return
 
@@ -88,7 +96,7 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     if not correct_answer_match:
         await update.message.reply_text(
             "Please specify the correct answer ID surrounded by colons `:`. See /help for an example.",
-            parse_mode='MarkdownV2',
+            parse_mode="MarkdownV2",
         )
         return
 
@@ -96,7 +104,7 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     if not (1 <= correct_answer_id <= len(answers)):
         await update.message.reply_text(
             f"The correct answer ID ({correct_answer_id}) is out of range. Please provide a number between 1 and {len(answers)}.",
-            parse_mode='MarkdownV2',
+            parse_mode="MarkdownV2",
         )
         return
 
@@ -186,22 +194,28 @@ async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "An unexpected error occurred. Please try again later or contact support."
     )
 
-# Main Application
-if __name__ == '__main__':
-    print('Starting bot...')
-    app = Application.builder().token(TOKEN).build()
 
-    # Commands
-    app.add_handler(CommandHandler('start', start_command))
-    app.add_handler(CommandHandler('help', help_command))
-    app.add_handler(CommandHandler('quiz', quiz_command))
-    app.add_handler(CommandHandler('lquiz', lquiz_command))
+# Webhook Route
+@app.post(WEBHOOK_PATH)
+async def handle_webhook(request: Request):
+    try:
+        update = Update.de_json(await request.json(), bot_app.bot)
+        await bot_app.process_update(update)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error processing update: {e}")
 
-    # Messages
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_message))
 
-    # Errors
-    app.add_error_handler(error)
+@app.on_event("startup")
+async def startup():
+    # Configure the bot with handlers
+    bot_app.add_handler(CommandHandler("start", start_command))
+    bot_app.add_handler(CommandHandler("help", help_command))
+    bot_app.add_handler(CommandHandler("quiz", quiz_command))
+    bot_app.add_handler(CommandHandler("lquiz", lquiz_command))
 
-    print('Polling...')
-    app.run_polling(poll_interval=3)
+    # Set Webhook
+    await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+
+@app.on_event("shutdown")
+async def shutdown():
+    await bot_app.shutdown()
