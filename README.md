@@ -61,6 +61,11 @@ Format your message as follows:
 
 **Quizz_ybot** aims to simplify quiz creation on Telegram, making it effortless for teachers, students, and anyone who wants to create engaging, interactive quizzes. By reducing the need for repetitive manual inputs, the bot streamlines the process, saving time and effort for its users
 
+## Future Improvements
+- [ ] Fetch quizzes from a `.txt` file
+- [ ] Forward Quizzes from channels or groups.
+- [ ] Easier syntax for Single Message mode
+
 ## Feedback
 
 Nothing is ever perfect and suitable for everyone! Please send me your feedback through email.
