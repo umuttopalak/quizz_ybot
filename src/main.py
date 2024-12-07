@@ -1,28 +1,34 @@
+import os
 from dotenv import load_dotenv
-from typing import Final
-from fastapi import FastAPI, Request, HTTPException
-
-# Webhook Route
-@app.post(WEBHOOK_PATH)
-async def handle_webhook(request: Request):
-    try:
-        update = Update.de_json(await request.json(), bot_app.bot)
-        await bot_app.process_update(update)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Error processing update: {e}")
+from flask import Flask, request
+from bot import create_bot
 
 
-@app.on_event("startup")
-async def startup():
-    # Configure the bot with handlers
-    bot_app.add_handler(CommandHandler("start", start_command))
-    bot_app.add_handler(CommandHandler("help", help_command))
-    bot_app.add_handler(CommandHandler("quiz", quiz_command))
-    bot_app.add_handler(CommandHandler("lquiz", lquiz_command))
+# Load environment variables
+load_dotenv()
+TOKEN = os.getenv('TOKEN')
+TELEGRAM_URL = "https://api.telegram.org/bot{token}".format(token=TOKEN)
+WEBHOOK = os.getenv('WEBHOOK_URL')
+WEBHOOK_URL = "https://{webhook}".format(webhook=WEBHOOK)
 
-    # Set Webhook
-    await bot_app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+# Initialize Flask app
+app = Flask(__name__)
 
-@app.on_event("shutdown")
-async def shutdown():
-    await bot_app.shutdown()
+# Initialize Telegram bot
+telegram_app = create_bot(TOKEN)
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+def webhook_handler():
+    """Handle webhook updates."""
+    data = request.json
+    telegram_app.update_queue.put(data)
+    return 'OK'
+
+@app.route('/set_webhook', methods=['GET', 'POST'])
+def set_webhook():
+    """Set the Telegram webhook."""
+    webhook_result = telegram_app.bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+    return f"Webhook setup result: {webhook_result}"
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 8443)))

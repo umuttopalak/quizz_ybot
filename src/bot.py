@@ -1,5 +1,6 @@
 import re
 import os
+from typing import Final
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -10,34 +11,25 @@ from telegram.ext import (
     CallbackContext,
 )
 
-load_dotenv()
-
-#Constants
-TOKEN: Final = os.getenv('TOKEN')
+# Constant
 BOT_USERNAME: Final = '@quizz_ybot'
-WEBHOOK_URL: Final = os.getenv("WEBHOOK_URL")
-WEBHOOK_PATH: Final = f"/{TOKEN}"
 
-#Regex Patterns
+# Regex Patterns
 QUESTION_PATTERN = r"\?([^\.]+)\."
 ANSWER_PATTERN = r"\!([^\.]+)\."
 CORRECT_ANSWER_PATTERN = r":(\d+):"
 EXPLANATION_PATTERN = r"::([^:]+)::"
 
-# Global variables
+# quizzes object for lquiz command
 quizzes = {}
-app = FastAPI()
-bot_app = Application.builder().token(TOKEN).build()
 
-
-# Command Handlers
+# Bot Command Handlers
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fname = update.message.from_user.first_name
     await update.message.reply_text(
         f"Welcome, {fname}! I am your quiz-making wizard, at your service! "
         "Use /help to learn how to create quizzes."
     )
-
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -56,12 +48,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ":1: \n"
         "::Just look at it!::\n"
         "```",
-        parse_mode="MarkdownV2",
+        parse_mode='MarkdownV2',
     )
 
-
 async def quiz_command(update: Update, context: CallbackContext):
-    #if quiz command is sent alone
     if len(context.args) == 0:
         await update.message.reply_text(
             "Please send your quiz in the correct format or check /help for instructions."
@@ -69,14 +59,12 @@ async def quiz_command(update: Update, context: CallbackContext):
     else:
         await create_quiz(update.message.text, update, context)
 
-
-# Quiz Creation from Text
 async def create_quiz(text: str, update: Update, context: CallbackContext):
     question_match = re.search(QUESTION_PATTERN, text)
     if not question_match:
         await update.message.reply_text(
             "Your input does not include a valid question. Please surround the question with `\\?` and `\\.`. See /help for an example.",
-            parse_mode="MarkdownV2",
+            parse_mode='MarkdownV2',
         )
         return
 
@@ -85,7 +73,7 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     if len(answers) < 2:
         await update.message.reply_text(
             "Please provide at least two answers, each surrounded by `\\!` and `\\.`. See /help for an example.",
-            parse_mode="MarkdownV2",
+            parse_mode='MarkdownV2',
         )
         return
 
@@ -93,7 +81,7 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     if not correct_answer_match:
         await update.message.reply_text(
             "Please specify the correct answer ID surrounded by colons `:`. See /help for an example.",
-            parse_mode="MarkdownV2",
+            parse_mode='MarkdownV2',
         )
         return
 
@@ -101,7 +89,7 @@ async def create_quiz(text: str, update: Update, context: CallbackContext):
     if not (1 <= correct_answer_id <= len(answers)):
         await update.message.reply_text(
             f"The correct answer ID ({correct_answer_id}) is out of range. Please provide a number between 1 and {len(answers)}.",
-            parse_mode="MarkdownV2",
+            parse_mode='MarkdownV2',
         )
         return
 
@@ -190,3 +178,15 @@ async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "An unexpected error occurred. Please try again later or contact support."
     )
+
+# Function to initialize the bot
+def create_bot(TOKEN):
+    app = Application.builder().token(TOKEN).build()
+
+    # Register handlers
+    app.add_handler(CommandHandler('start', start_command))
+    app.add_handler(CommandHandler('help', help_command))
+    app.add_handler(CommandHandler('quiz', quiz_command))
+    app.add_error_handler(error)
+
+    return app
