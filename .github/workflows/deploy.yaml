@@ -1,5 +1,8 @@
 name: Deploy pythonanywhere webapp
-on: [push]
+on:
+  push:
+    branches:
+      - master
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -8,9 +11,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Re-Deploy Pythonanywhere Django API
-        uses: umuttopalak/pythonanywhere-deploy-action@v1.1.0
+        uses: umuttopalak/pythonanywhere-deploy-action@master
         with:
-          host: 'www.pythonanywhere.com'
-          username: {{ secrets.USERNAME }}
-          api_token: {{ secrets.APITOKEN }}
-          domain_name: {{ secrets.DOMAIN_NAME }}
+          host: "www.pythonanywhere.com"
+          username: ${{ secrets.username }}
+          api_token: ${{ secrets.api_token }}
+          domain_name: ${{ secrets.domain_name }}
